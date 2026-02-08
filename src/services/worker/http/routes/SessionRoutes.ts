@@ -14,7 +14,6 @@ import { DatabaseManager } from '../../DatabaseManager.js';
 import { SDKAgent } from '../../SDKAgent.js';
 import { GeminiAgent, isGeminiAvailable } from '../../GeminiAgent.js';
 import { OpenRouterAgent, isOpenRouterAvailable } from '../../OpenRouterAgent.js';
-import { CodexAgent, isCodexAvailable } from '../../CodexAgent.js';
 import type { WorkerService } from '../../../worker-service.js';
 import { BaseRouteHandler } from '../BaseRouteHandler.js';
 import { SessionEventBroadcaster } from '../../events/SessionEventBroadcaster.js';
@@ -34,7 +33,6 @@ export class SessionRoutes extends BaseRouteHandler {
     private sdkAgent: SDKAgent,
     private geminiAgent: GeminiAgent,
     private openRouterAgent: OpenRouterAgent,
-    private codexAgent: CodexAgent,
     private eventBroadcaster: SessionEventBroadcaster,
     private workerService: WorkerService
   ) {
@@ -52,17 +50,9 @@ export class SessionRoutes extends BaseRouteHandler {
    * Note: Session linking via contentSessionId allows provider switching mid-session.
    * The conversationHistory on ActiveSession maintains context across providers.
    */
-  private getActiveAgent(): SDKAgent | GeminiAgent | OpenRouterAgent | CodexAgent {
+  private getActiveAgent(): SDKAgent | GeminiAgent | OpenRouterAgent {
     const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
     const provider = settings.CLAUDE_MEM_PROVIDER;
-
-    if (provider === 'codex') {
-      if (isCodexAvailable()) {
-        logger.debug('SESSION', 'Using Codex agent');
-        return this.codexAgent;
-      }
-      throw new Error('Codex provider selected but Codex CLI not found. Set CLAUDE_MEM_CODEX_PATH in settings or ensure codex is on PATH.');
-    }
 
     if (provider === 'openrouter') {
       if (isOpenRouterAvailable()) {
@@ -81,10 +71,6 @@ export class SessionRoutes extends BaseRouteHandler {
     }
 
     if (provider === 'auto') {
-      if (isCodexAvailable()) {
-        logger.debug('SESSION', 'Auto provider selected Codex');
-        return this.codexAgent;
-      }
       if (isOpenRouterAvailable()) {
         logger.debug('SESSION', 'Auto provider selected OpenRouter');
         return this.openRouterAgent;
@@ -101,16 +87,14 @@ export class SessionRoutes extends BaseRouteHandler {
   /**
    * Get the currently selected provider name
    */
-  private getSelectedProvider(): 'claude' | 'gemini' | 'openrouter' | 'codex' {
+  private getSelectedProvider(): 'claude' | 'gemini' | 'openrouter' {
     const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
     const provider = settings.CLAUDE_MEM_PROVIDER;
 
-    if (provider === 'codex') return 'codex';
     if (provider === 'openrouter') return 'openrouter';
     if (provider === 'gemini') return 'gemini';
 
     if (provider === 'auto') {
-      if (isCodexAvailable()) return 'codex';
       if (isOpenRouterAvailable()) return 'openrouter';
       if (isGeminiAvailable()) return 'gemini';
     }
@@ -121,7 +105,7 @@ export class SessionRoutes extends BaseRouteHandler {
   /**
    * Ensures agent generator is running for a session
    * Auto-starts if not already running to process pending queue
-   * Uses Claude SDK, Codex CLI, Gemini, or OpenRouter based on settings
+   * Uses Claude SDK, Gemini, or OpenRouter based on settings
    *
    * Provider switching: If provider setting changed while generator is running,
    * we let the current generator finish naturally (max 5s linger timeout).
@@ -164,7 +148,7 @@ export class SessionRoutes extends BaseRouteHandler {
    */
   private startGeneratorWithProvider(
     session: ReturnType<typeof this.sessionManager.getSession>,
-    provider: 'claude' | 'gemini' | 'openrouter' | 'codex',
+    provider: 'claude' | 'gemini' | 'openrouter',
     source: string
   ): void {
     if (!session) return;
@@ -182,12 +166,10 @@ export class SessionRoutes extends BaseRouteHandler {
     const agent =
       provider === 'openrouter' ? this.openRouterAgent :
       provider === 'gemini' ? this.geminiAgent :
-      provider === 'codex' ? this.codexAgent :
       this.sdkAgent;
     const agentName =
       provider === 'openrouter' ? 'OpenRouter' :
       provider === 'gemini' ? 'Gemini' :
-      provider === 'codex' ? 'Codex' :
       'Claude SDK';
 
     // Use database count for accurate telemetry (in-memory array is always empty due to FK constraint fix)

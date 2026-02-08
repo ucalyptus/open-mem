@@ -197,7 +197,7 @@ Claude-Mem intercepts Claude Code's lifecycle events via high-performance hook s
 ### 2. Asynchronous Worker Architecture
 To ensure the terminal remains responsive, heavy lifting is offloaded to a background **Worker Service**:
 - **Processing Queue**: Tool observations are placed in a SQLite-backed queue.
-- **Generators**: Background "Generators" (powered by Claude SDK, Codex, Gemini, or OpenRouter) process raw tool data into structured, searchable semantic summaries.
+- **Generators**: Background "Generators" (powered by Claude SDK, Gemini, or OpenRouter) process raw tool data into structured, searchable semantic summaries.
 - **Process Management**: Managed by the **Bun** runtime for sub-millisecond startup times and robust daemonization.
 
 ### 3. Hybrid Storage & Retrieval Strategy
