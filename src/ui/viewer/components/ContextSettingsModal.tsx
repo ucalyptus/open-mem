@@ -414,17 +414,33 @@ export function ContextSettingsModal({
             >
               <FormField
                 label="AI Provider"
-                tooltip="Choose between Claude (via Agent SDK) or Gemini (via REST API)"
+                tooltip="Choose which provider claude-mem uses for extraction"
               >
                 <select
-                  value={formState.CLAUDE_MEM_PROVIDER || 'claude'}
+                  value={formState.CLAUDE_MEM_PROVIDER || 'auto'}
                   onChange={(e) => updateSetting('CLAUDE_MEM_PROVIDER', e.target.value)}
                 >
-                  <option value="claude">Claude (uses your Claude account)</option>
+                  <option value="auto">Auto (use any available provider)</option>
+                  <option value="codex">Codex (uses your Codex CLI login)</option>
+                  <option value="claude">Claude (uses your Claude CLI login)</option>
                   <option value="gemini">Gemini (uses API key)</option>
                   <option value="openrouter">OpenRouter (multi-model)</option>
                 </select>
               </FormField>
+
+              {formState.CLAUDE_MEM_PROVIDER === 'codex' && (
+                <FormField
+                  label="Codex CLI Path (Optional)"
+                  tooltip="Path to codex executable if not on PATH"
+                >
+                  <input
+                    type="text"
+                    value={formState.CLAUDE_MEM_CODEX_PATH || ''}
+                    onChange={(e) => updateSetting('CLAUDE_MEM_CODEX_PATH', e.target.value)}
+                    placeholder="/path/to/codex"
+                  />
+                </FormField>
+              )}
 
               {formState.CLAUDE_MEM_PROVIDER === 'claude' && (
                 <FormField

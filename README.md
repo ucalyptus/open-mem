@@ -93,6 +93,7 @@
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
   <a href="#how-it-works">How It Works</a> •
+  <a href="#technical-deep-dive">Technical Deep Dive</a> •
   <a href="#mcp-search-tools">Search Tools</a> •
   <a href="#documentation">Documentation</a> •
   <a href="#configuration">Configuration</a> •
@@ -179,6 +180,40 @@ Restart Claude Code. Context from previous sessions will automatically appear in
 6. **Chroma Vector Database** - Hybrid semantic + keyword search for intelligent context retrieval
 
 See [Architecture Overview](https://docs.claude-mem.ai/architecture/overview) for details.
+
+---
+
+## Technical Deep Dive
+
+Claude-Mem is built on a distributed local-first architecture that prioritizes speed, privacy, and token efficiency.
+
+### 1. Lifecycle Hook Orchestration
+Claude-Mem intercepts Claude Code's lifecycle events via high-performance hook scripts (built with Bun):
+- **SessionStart**: Executes `smart-install` (dependency check) and `context-hook` which injects a compact index of prior memories into the new session.
+- **UserPromptSubmit**: Triggers `session-init` to create a new session entry and start tracking user intent.
+- **PostToolUse**: Captures tool inputs and outputs as "Observations," enqueuing them for asynchronous semantic processing.
+- **SessionEnd/Stop**: Generates a high-level semantic summary of the entire session to preserve knowledge for the future.
+
+### 2. Asynchronous Worker Architecture
+To ensure the terminal remains responsive, heavy lifting is offloaded to a background **Worker Service**:
+- **Processing Queue**: Tool observations are placed in a SQLite-backed queue.
+- **Generators**: Background "Generators" (powered by Claude SDK, Codex, Gemini, or OpenRouter) process raw tool data into structured, searchable semantic summaries.
+- **Process Management**: Managed by the **Bun** runtime for sub-millisecond startup times and robust daemonization.
+
+### 3. Hybrid Storage & Retrieval Strategy
+Claude-Mem uses a multi-layered search architecture to balance precision and recall:
+- **SQLite (FTS5)**: Provides lightning-fast full-text keyword search across all captured work.
+- **Chroma (Vector DB)**: Enables semantic "vibe" search by converting queries and memories into high-dimensional embeddings (using `uv` for Python management).
+- **3-Layer Retrieval Pattern**: Instead of dumping everything into context, Claude uses a tiered approach:
+    1. `search`: Returns a compact index of relevant result IDs.
+    2. `timeline`: Provides chronological context around specific points in time.
+    3. `get_observations`: Fetches full details only for the most relevant items.
+
+### 4. Edge Privacy & Security
+Security is baked into the "edge" (the hooks):
+- **Local-First**: All data is stored in `~/.claude-mem/`. No code or logs ever leave your machine unless you've configured a remote LLM provider.
+- **In-flight Stripping**: The hooks automatically strip content wrapped in `<private>` tags *before* it reaches the worker or database.
+- **Fail-Open**: The system is designed to gracefully fail-open, ensuring that even if the worker is down, your Claude Code session remains functional.
 
 ---
 

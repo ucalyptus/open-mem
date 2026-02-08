@@ -1405,6 +1405,148 @@ export class SearchManager {
   }
 
   /**
+   * Handoff context bundle for incoming agents
+   */
+  async getHandoff(args: any): Promise<any> {
+    const project = args.project || basename(process.cwd());
+    const limit = Number.isFinite(Number(args.limit)) ? Number(args.limit) : 3;
+    const obsLimit = Number.isFinite(Number(args.obs_limit)) ? Number(args.obs_limit) : 10;
+    const format = (args.format || 'text').toString();
+
+    const recentSessions = this.sessionStore.getRecentSessionsWithStatus(project, limit);
+    const latestSummary = this.sessionSearch.searchSessions(undefined, {
+      project,
+      limit: 1,
+      orderBy: 'date_desc'
+    })[0] || null;
+    const recentObservations = this.sessionSearch.searchObservations(undefined, {
+      project,
+      limit: obsLimit,
+      orderBy: 'date_desc'
+    });
+
+    const activeSession = recentSessions.find(session => session.status === 'active');
+    const activeObservations = activeSession?.memory_session_id
+      ? this.sessionStore.getObservationsForSession(activeSession.memory_session_id)
+      : [];
+
+    const parseFiles = (value?: string | null): string[] => {
+      if (!value) return [];
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed.map(item => String(item)).filter(Boolean);
+        }
+      } catch (error) {
+        logger.debug('WORKER', 'Failed to parse files JSON, falling back to string', {}, error as Error);
+      }
+      if (value.includes(',')) {
+        return value.split(',').map(entry => entry.trim()).filter(Boolean);
+      }
+      return value.trim() ? [value.trim()] : [];
+    };
+
+    const summaryFilesRead = latestSummary?.files_read ? parseFiles(latestSummary.files_read) : [];
+    const summaryFilesEdited = latestSummary?.files_edited ? parseFiles(latestSummary.files_edited) : [];
+
+    if (format === 'json') {
+      return {
+        project,
+        generated_at: new Date().toISOString(),
+        latest_summary: latestSummary,
+        recent_sessions: recentSessions,
+        active_session: activeSession
+          ? {
+            ...activeSession,
+            observations: activeObservations
+          }
+          : null,
+        recent_observations: recentObservations,
+        files_read: summaryFilesRead,
+        files_edited: summaryFilesEdited
+      };
+    }
+
+    const lines: string[] = [];
+    lines.push('# Handoff Context');
+    lines.push('');
+    lines.push(`**Project:** ${project}`);
+    lines.push(`**Generated:** ${new Date().toLocaleString()}`);
+    lines.push('');
+
+    if (latestSummary) {
+      lines.push('## Latest Summary');
+      lines.push('');
+      if (latestSummary.request) lines.push(`**Request:** ${latestSummary.request}`);
+      if (latestSummary.completed) lines.push(`**Completed:** ${latestSummary.completed}`);
+      if (latestSummary.learned) lines.push(`**Learned:** ${latestSummary.learned}`);
+      if (latestSummary.next_steps) lines.push(`**Next Steps:** ${latestSummary.next_steps}`);
+      if (summaryFilesRead.length > 0) lines.push(`**Files Read:** ${summaryFilesRead.join(', ')}`);
+      if (summaryFilesEdited.length > 0) lines.push(`**Files Edited:** ${summaryFilesEdited.join(', ')}`);
+      if (latestSummary.created_at_epoch) {
+        lines.push(`**Date:** ${formatDateTime(latestSummary.created_at_epoch)}`);
+      }
+      lines.push('');
+    } else {
+      lines.push('## Latest Summary');
+      lines.push('');
+      lines.push('*No summary available yet.*');
+      lines.push('');
+    }
+
+    if (activeSession) {
+      lines.push('## Active Session');
+      lines.push('');
+      if (activeSession.user_prompt) {
+        lines.push(`**Request:** ${activeSession.user_prompt}`);
+      }
+      if (activeObservations.length > 0) {
+        lines.push(`**Observations (${activeObservations.length}):**`);
+        for (const obs of activeObservations) {
+          const subtitle = obs.subtitle ? ` — ${obs.subtitle}` : '';
+          lines.push(`- ${obs.title}${subtitle}`);
+        }
+      } else {
+        lines.push('*No observations yet.*');
+      }
+      lines.push('');
+    }
+
+    if (recentObservations.length > 0) {
+      lines.push('## Recent Observations');
+      lines.push('');
+      for (const obs of recentObservations) {
+        const timestamp = formatDateTime(obs.created_at_epoch);
+        const title = obs.title || obs.narrative || obs.text || 'Observation';
+        lines.push(`- ${timestamp}: ${title}`);
+      }
+      lines.push('');
+    }
+
+    if (recentSessions.length > 0) {
+      lines.push('## Recent Sessions');
+      lines.push('');
+      for (const session of recentSessions) {
+        const label = session.status === 'active'
+          ? 'Active'
+          : session.has_summary
+            ? 'Completed'
+            : session.status.charAt(0).toUpperCase() + session.status.slice(1);
+        const prompt = session.user_prompt ? ` — ${session.user_prompt}` : '';
+        lines.push(`- ${label}${prompt}`);
+      }
+      lines.push('');
+    }
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: lines.join('\n')
+      }]
+    };
+  }
+
+  /**
    * Tool handler: get_context_timeline
    */
   async getContextTimeline(args: any): Promise<any> {

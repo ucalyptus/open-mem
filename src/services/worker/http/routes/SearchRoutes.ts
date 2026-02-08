@@ -24,6 +24,7 @@ export class SearchRoutes extends BaseRouteHandler {
     app.get('/api/decisions', this.handleDecisions.bind(this));
     app.get('/api/changes', this.handleChanges.bind(this));
     app.get('/api/how-it-works', this.handleHowItWorks.bind(this));
+    app.get('/api/handoff', this.handleHandoff.bind(this));
 
     // Backward compatibility endpoints
     app.get('/api/search/observations', this.handleSearchObservations.bind(this));
@@ -86,6 +87,15 @@ export class SearchRoutes extends BaseRouteHandler {
    */
   private handleHowItWorks = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {
     const result = await this.searchManager.howItWorks(req.query);
+    res.json(result);
+  });
+
+  /**
+   * Handoff context bundle for incoming agents
+   * GET /api/handoff?project=...&limit=3&obs_limit=10&format=text|json
+   */
+  private handleHandoff = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {
+    const result = await this.searchManager.getHandoff(req.query);
     res.json(result);
   });
 
@@ -342,6 +352,17 @@ export class SearchRoutes extends BaseRouteHandler {
           }
         },
         {
+          path: '/api/handoff',
+          method: 'GET',
+          description: 'Get condensed handoff context for incoming agents',
+          parameters: {
+            project: 'Project name (default: current directory)',
+            limit: 'Number of recent sessions to summarize (default: 3)',
+            obs_limit: 'Number of recent observations to include (default: 10)',
+            format: 'Response format: "text" or "json" (default: text)'
+          }
+        },
+        {
           path: '/api/timeline/by-query',
           method: 'GET',
           description: 'Search for best match, then get timeline around it',
@@ -363,7 +384,8 @@ export class SearchRoutes extends BaseRouteHandler {
         'curl "http://localhost:37777/api/search/observations?query=authentication&limit=5"',
         'curl "http://localhost:37777/api/search/by-type?type=bugfix&limit=10"',
         'curl "http://localhost:37777/api/context/recent?project=claude-mem&limit=3"',
-        'curl "http://localhost:37777/api/context/timeline?anchor=123&depth_before=5&depth_after=5"'
+        'curl "http://localhost:37777/api/context/timeline?anchor=123&depth_before=5&depth_after=5"',
+        'curl "http://localhost:37777/api/handoff?project=claude-mem"'
       ]
     });
   });
